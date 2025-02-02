@@ -1,0 +1,9 @@
+- [x] Initial program.
+- [ ] Add timer.
+- [ ] Add words list and choose words randomly from it.
+- [ ] Change the word coloring algorithm to if a char doesn't match then don't match the rest of the chars.
+- [ ] Display results at the end.
+- [ ] BUG: Stop from crashing if more words are added when all words are complete.
+- [ ] Refactor?
+- [ ] Add help and other menu things.
+- [ ] Add UTs?
