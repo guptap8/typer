@@ -1,11 +1,17 @@
+#include <atomic>
+#include <csignal>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <string>
 #include <termios.h>
+#include <thread>
 #include <unistd.h>
 #include <vector>
 
+#define RGB_COLOR(r, g, b)                                                     \
+	"\x1b[38;2;" + to_string(r) + ";" + to_string(g) + ";" +               \
+	    to_string((b)) + "m"
 #define GREY_COLOR "\x1b[38;2;100;100;100m"
 #define RED_COLOR "\x1b[31m"
 #define GREEN_COLOR "\x1b[32m"
@@ -15,7 +21,49 @@
 #define CYAN_COLOR "\x1b[36m"
 #define RESET_COLOR "\x1b[0m"
 
+#define BACKSPACE 127
+
+#define CLEAR_SCREEN "\033[2J\033[1;1H"
+
 using namespace std;
+
+enum CursorDirection { UP, DOWN, RIGHT, LEFT };
+
+string moveCursor(int n, CursorDirection direction)
+{
+	string result = "\033[" + to_string(n);
+	switch (direction) {
+	case UP:
+		result += "A";
+		break;
+	case DOWN:
+		result += "B";
+		break;
+	case RIGHT:
+		result += "C";
+		break;
+	case LEFT:
+		result += "D";
+		break;
+	// TODO: Move right by default because no error handling
+	// right now. Change later to handle invalid input properly.
+	default:
+		result += "A";
+		break;
+	}
+	return result;
+}
+
+atomic<bool> stopFlag{false};
+atomic<int> currentTime{0};
+
+void printTimer(int time)
+{
+	cout << "\r" << moveCursor(1, UP);
+	cout << time;
+	cout << "\r";
+	cout.flush();
+}
 
 void flush_input()
 {
@@ -49,6 +97,8 @@ char get_key()
 
 void printWords(vector<string> &words, vector<string> &guessedWords)
 {
+	printTimer(currentTime);
+	cout << moveCursor(1, DOWN);
 	for (int i = 0; i < guessedWords.size(); i++) {
 		for (int j = 0;
 		     j < max(guessedWords[i].size(), words[i].size()); j++) {
@@ -86,7 +136,7 @@ void debugPrinter(vector<string> &words, vector<string> &guessedWords)
 	for (auto i : guessedWords) {
 		cout << i << " ";
 	}
-	cout << "\033[1A";
+	cout << moveCursor(1, UP);
 	cout << "\r";
 }
 
@@ -99,7 +149,7 @@ void updateAndPrintState(vector<string> &words, vector<string> &guessedWords,
 		// debugPrinter(words, guessedWords);
 		printWords(words, guessedWords);
 		guessedWords.push_back("");
-	} else if (ch == 127) {
+	} else if (ch == BACKSPACE) {
 		if (guessedWords.size() > 1 ||
 		    (guessedWords.size() == 1 && guessedWords[0].size() > 0)) {
 			int originalSize = guessedWords.back().size();
@@ -145,7 +195,7 @@ void updateAndPrintState(vector<string> &words, vector<string> &guessedWords,
 	}
 }
 
-int main(int argc, char **argv)
+void runGame()
 {
 	vector<string> words = {"apple",    "banana", "cherry", "dragonfruit",
 				"elephant", "falcon", "guitar", "horizon",
@@ -161,19 +211,72 @@ int main(int argc, char **argv)
 	cin.tie(NULL);
 	char ch;
 
-	cout << "\033[2J\033[1;1H";
+	cout << CLEAR_SCREEN;
+	printTimer(currentTime);
 	cout << GREY_COLOR;
-	cout << state << "\r";
+	cout << moveCursor(1, DOWN) << state << "\r";
 	cout << RESET_COLOR;
 	cout.flush();
-	while ((ch = get_key()) != EOF) {
-		// Clear screen.
-		cout << "\033[2J\033[1;1H";
+	while (!stopFlag) {
+		if ((ch = get_key()) != EOF) {
+			cout << CLEAR_SCREEN;
 
-		updateAndPrintState(words, guessedWords, ch, currentWord,
-				    indexInWord);
+			updateAndPrintState(words, guessedWords, ch,
+					    currentWord, indexInWord);
 
-		// Flush output.
-		cout.flush();
+			// Flush output.
+			cout.flush();
+		} else {
+			break;
+		}
 	}
+}
+
+void timer(int seconds)
+{
+	for (int i = seconds; i > 0 && !stopFlag; --i) {
+		// std::cout << "Time remaining: " << i << " seconds\r";
+		// std::cout.flush();
+		currentTime = seconds - i;
+		// printTimer(i);
+		std::this_thread::sleep_for(std::chrono::seconds(1));
+	}
+	// std::cout << "\nTime's up!" << std::endl;
+	stopFlag = true; // Signal worker to stop
+}
+
+void enterAlternateScreen()
+{
+	std::cout << "\033[?1049h"; // Switch to the alternate screen buffer
+	std::cout.flush();
+}
+
+void exitAlternateScreen()
+{
+	std::cout << "\033[?1049l"; // Return to the normal screen buffer
+	std::cout.flush();
+}
+
+void signalHandler(int signal)
+{
+	exitAlternateScreen();
+	exit(signal);
+}
+
+int main(int argc, char **argv)
+{
+	std::signal(SIGINT, signalHandler);
+	std::signal(SIGTERM, signalHandler);
+
+	enterAlternateScreen();
+
+	int totalSeconds = 10;
+	thread worker(runGame);
+	timer(totalSeconds);
+	worker.join();
+	cout << CLEAR_SCREEN;
+	cout << "GAME OVER" << endl;
+	sleep(1);
+
+	exitAlternateScreen();
 }
