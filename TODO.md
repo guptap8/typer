@@ -1,10 +1,11 @@
 - [x] Initial program.
 - [x] Add timer.
-- [ ] Refactor to use non blocking IO.
+- [x] Refactor to use non blocking IO.
 - [ ] Add words list and choose words randomly from it.
 - [ ] Change the word coloring algorithm to if a char doesn't match then don't match the rest of the chars.
 - [ ] Display results at the end.
 - [ ] BUG: Stop from crashing if more words are added when all words are complete.
+- [ ] BUG: Backspace behaviour is wrong for spaces.
 - [ ] Add help and other menu things.
 - [ ] Implement other modes like typeing test mode, current mode is time trial mode only.
 - [ ] Add UTs?

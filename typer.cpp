@@ -1,9 +1,14 @@
 #include <atomic>
+#include <bits/types/struct_timeval.h>
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <poll.h>
 #include <string>
+#include <sys/poll.h>
+#include <sys/select.h>
 #include <termios.h>
 #include <thread>
 #include <unistd.h>
@@ -20,6 +25,11 @@
 #define MAGENTA_COLOR "\x1b[35m"
 #define CYAN_COLOR "\x1b[36m"
 #define RESET_COLOR "\x1b[0m"
+
+#define HIDE_CURSOR "\033[?25l"
+#define UNHIDE_CURSOR "\033[?25h"
+#define REVERSE_VIDEO "\033[7m"
+#define RESET_VIDEO "\033[0m"
 
 #define BACKSPACE 127
 
@@ -59,9 +69,11 @@ atomic<int> currentTime{0};
 
 void printTimer(int time)
 {
+	cout << RGB_COLOR(255, 255, 255);
 	cout << "\r" << moveCursor(1, UP);
 	cout << time;
 	cout << "\r";
+	cout << RESET_COLOR;
 	cout.flush();
 }
 
@@ -70,28 +82,27 @@ void flush_input()
 	tcflush(STDIN_FILENO, TCIFLUSH); // Flush input buffer
 }
 
+struct termios originalTermios;
+
+void disableCanonicalMode()
+{
+	struct termios raw;
+	tcgetattr(STDIN_FILENO, &originalTermios);
+	raw = originalTermios;
+	raw.c_lflag &= ~(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+}
+
+void restoreTerminalSettings()
+{
+	cout << UNHIDE_CURSOR << endl;
+	tcsetattr(STDIN_FILENO, TCSANOW, &originalTermios);
+}
+
 char get_key()
 {
-	struct termios oldt, newt;
 	char ch;
-
-	// Get current terminal settings
-	tcgetattr(STDIN_FILENO, &oldt);
-	newt = oldt;
-
-	// Disable canonical mode and echo
-	newt.c_lflag &= ~(ICANON | ECHO);
-	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-	// Read single character
 	read(STDIN_FILENO, &ch, 1);
-
-	// Restore old terminal settings
-	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-
-	// Flush input buffer
-	flush_input();
-
 	return ch;
 }
 
@@ -121,7 +132,13 @@ void printWords(vector<string> &words, vector<string> &guessedWords)
 	}
 	for (int i = guessedWords.size(); i < words.size(); i++) {
 		cout << GREY_COLOR;
+		if (i == guessedWords.size()) {
+			cout << REVERSE_VIDEO;
+		}
 		cout << words[i];
+		if (i == guessedWords.size()) {
+			cout << RESET_VIDEO;
+		}
 		cout << (i == words.size() - 1 ? "" : " ");
 	}
 	cout << RESET_COLOR;
@@ -146,7 +163,6 @@ void updateAndPrintState(vector<string> &words, vector<string> &guessedWords,
 	if (ch == ' ') {
 		currentWord++;
 		indexInWord = 0;
-		// debugPrinter(words, guessedWords);
 		printWords(words, guessedWords);
 		guessedWords.push_back("");
 	} else if (ch == BACKSPACE) {
@@ -172,11 +188,9 @@ void updateAndPrintState(vector<string> &words, vector<string> &guessedWords,
 								      1);
 			}
 		}
-		// debugPrinter(words, guessedWords);
 		printWords(words, guessedWords);
 	} else {
 		guessedWords.back() += ch;
-		// debugPrinter(words, guessedWords);
 		printWords(words, guessedWords);
 	}
 	cout << RESET_COLOR;
@@ -193,6 +207,38 @@ void updateAndPrintState(vector<string> &words, vector<string> &guessedWords,
 	if (moveBack > 0) {
 		cout << moveBackString;
 	}
+}
+
+bool isInputAvailable()
+{
+	fd_set readfds;
+	struct timeval timeout = {0, 0};
+
+	FD_ZERO(&readfds);
+	FD_SET(STDIN_FILENO, &readfds);
+
+	int selectResult =
+	    select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &timeout);
+
+	cout << "Select result: " << to_string(selectResult) << endl;
+
+	return selectResult > 0;
+}
+
+bool isInputAvailable2(struct pollfd *fds)
+{
+	int ret = poll(fds, 1, 5);
+
+	bool res = false;
+
+	if (ret == -1) {
+		res = false;
+	} else if (ret > 0) {
+		if (fds[0].revents & POLLIN) {
+			res = true;
+		}
+	}
+	return res;
 }
 
 void runGame()
@@ -217,8 +263,12 @@ void runGame()
 	cout << moveCursor(1, DOWN) << state << "\r";
 	cout << RESET_COLOR;
 	cout.flush();
+	struct pollfd fds[1];
+	fds[0].fd = STDIN_FILENO;
+	fds[0].events = POLLIN;
 	while (!stopFlag) {
-		if ((ch = get_key()) != EOF) {
+		if (isInputAvailable2(fds)) {
+			ch = get_key();
 			cout << CLEAR_SCREEN;
 
 			updateAndPrintState(words, guessedWords, ch,
@@ -226,8 +276,6 @@ void runGame()
 
 			// Flush output.
 			cout.flush();
-		} else {
-			break;
 		}
 	}
 }
@@ -235,19 +283,17 @@ void runGame()
 void timer(int seconds)
 {
 	for (int i = seconds; i > 0 && !stopFlag; --i) {
-		// std::cout << "Time remaining: " << i << " seconds\r";
-		// std::cout.flush();
 		currentTime = seconds - i;
-		// printTimer(i);
+		printTimer(currentTime);
 		std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
-	// std::cout << "\nTime's up!" << std::endl;
 	stopFlag = true; // Signal worker to stop
 }
 
 void enterAlternateScreen()
 {
 	std::cout << "\033[?1049h"; // Switch to the alternate screen buffer
+	cout << HIDE_CURSOR << endl;
 	std::cout.flush();
 }
 
@@ -259,24 +305,33 @@ void exitAlternateScreen()
 
 void signalHandler(int signal)
 {
+	restoreTerminalSettings();
 	exitAlternateScreen();
 	exit(signal);
 }
 
-int main(int argc, char **argv)
+void registerSignalHandlers()
 {
 	std::signal(SIGINT, signalHandler);
 	std::signal(SIGTERM, signalHandler);
+	std::signal(SIGSEGV, signalHandler);
+}
 
+int main(int argc, char **argv)
+{
+	registerSignalHandlers();
 	enterAlternateScreen();
+	disableCanonicalMode();
 
-	int totalSeconds = 10;
+	int totalSeconds = 60;
 	thread worker(runGame);
-	timer(totalSeconds);
+	thread timerWorker(timer, totalSeconds);
 	worker.join();
+	timerWorker.join();
 	cout << CLEAR_SCREEN;
 	cout << "GAME OVER" << endl;
-	sleep(1);
+	this_thread::sleep_for(chrono::milliseconds(500));
 
+	restoreTerminalSettings();
 	exitAlternateScreen();
 }
