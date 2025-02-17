@@ -1,4 +1,4 @@
-#include <algorithm>
+#include "words.h"
 #include <asm-generic/ioctls.h>
 #include <atomic>
 #include <bits/types/struct_timeval.h>
@@ -6,7 +6,10 @@
 #include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <ctime>
+#include <fstream>
 #include <iostream>
 #include <poll.h>
 #include <string>
@@ -16,11 +19,13 @@
 #include <termios.h>
 #include <thread>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 #define RGB_COLOR(r, g, b)                                                     \
 	"\x1b[38;2;" + to_string(r) + ";" + to_string(g) + ";" +               \
 	    to_string((b)) + "m"
+#define WHITE_COLOR "\x1b[38;2;255;255;255m"
 #define GREY_COLOR "\x1b[38;2;100;100;100m"
 #define RED_COLOR "\x1b[31m"
 #define GREEN_COLOR "\x1b[32m"
@@ -41,7 +46,12 @@
 
 using namespace std;
 
+ofstream logs("./logs");
+
 enum CursorDirection { UP, DOWN, RIGHT, LEFT };
+
+int wordsSetIdx = -1;
+vector<pair<vector<string>, vector<string>>> wordsSet = {};
 
 string moveCursor(int n, CursorDirection direction)
 {
@@ -80,11 +90,6 @@ void printTimer(int time)
 	cout << "\r";
 	cout << RESET_COLOR;
 	cout.flush();
-}
-
-void flush_input()
-{
-	tcflush(STDIN_FILENO, TCIFLUSH); // Flush input buffer
 }
 
 struct termios originalTermios;
@@ -127,30 +132,80 @@ bool isInputAvailable(struct pollfd *fds)
 	return res;
 }
 
-vector<string> getPrevWordSet()
+pair<string, string> getStateInputs(pair<vector<string>, vector<string>> &words)
 {
-	return {"apple",  "banana", "cherry",  "dragonfruit", "elephant",
-		"falcon", "guitar", "horizon", "island",      "jungle"};
+	auto concat = [](vector<string> &list) -> string {
+		string ret = "";
+		for (int i = 0; i < list.size(); i++) {
+			ret += list[i];
+			if (i != list.size() - 1) {
+				ret += " ";
+			}
+		}
+		return ret;
+	};
+	return {concat(words.first), concat(words.second)};
 }
 
-vector<string> getNextWordSet()
+pair<vector<string>, vector<string>> getPrevWordSet()
 {
-	return {"apple",  "banana", "cherry",  "dragonfruit", "elephant",
-		"falcon", "guitar", "horizon", "island",      "jungle"};
+	wordsSetIdx--;
+	if (wordsSetIdx < 0) {
+		wordsSetIdx = 0;
+	}
+	return wordsSet[wordsSetIdx];
 }
 
-void updateStateToPrev()
+pair<vector<string>, vector<string>> getNextWordSet(string &state,
+						    string &inputs)
 {
-	// TODO: Add implementation.
+	vector<string> inputsParsed;
+	string temp = "";
+	for (int i = 0; i < inputs.size(); i++) {
+		if (inputs[i] == ' ') {
+			inputsParsed.push_back(temp);
+			temp = "";
+			continue;
+		}
+		temp += inputs[i];
+	}
+	if (temp != "") {
+		inputsParsed.push_back(temp);
+	}
+	if (!wordsSet.empty()) {
+		wordsSet[wordsSetIdx].second = inputsParsed;
+	}
+	if (wordsSetIdx < wordsSet.size() - 1) {
+		wordsSetIdx++;
+		auto temp = wordsSet[wordsSetIdx];
+		return temp;
+	}
+	vector<string> nextWords;
+	for (int i = 0; i < 10; i++) {
+		int randNum = rand() % 1000;
+		nextWords.push_back(dictionary[randNum]);
+	};
+	wordsSet.push_back({nextWords, {}});
+	wordsSetIdx++;
+	return {nextWords, {}};
+}
+
+void updateStateToPrev(string &state, string &inputs)
+{
+	pair<vector<string>, vector<string>> prevWords = getPrevWordSet();
+	pair<string, string> stateInputs = getStateInputs(prevWords);
+	state = stateInputs.first;
+	inputs = stateInputs.second;
 }
 
 void updateStateToNext(string &state, string &inputs, int &spacesCount, int &wc)
 {
-	vector<string> words = getNextWordSet();
-	wc = words.size();
+	pair<vector<string>, vector<string>> words =
+	    getNextWordSet(state, inputs);
+	wc = words.first.size();
 	state = "";
 	for (int i = 0; i < wc; i++) {
-		state += words[i];
+		state += words.first[i];
 		if (i != wc - 1) {
 			state += " ";
 		}
@@ -164,6 +219,10 @@ void updateStateToNext(string &state, string &inputs, int &spacesCount, int &wc)
 void updateState(string &state, string &inputs, char &ch, int &spacesCount,
 		 int &wc)
 {
+	if ((ch > 'z' || ch < 'a') && (ch < 'A' || ch > 'Z') &&
+	    ch != BACKSPACE && ch != ' ') {
+		return;
+	}
 	if (ch == BACKSPACE) {
 		if (!inputs.empty()) {
 			if (inputs.back() == ' ') {
@@ -172,7 +231,10 @@ void updateState(string &state, string &inputs, char &ch, int &spacesCount,
 			inputs.pop_back();
 		} else {
 			// TODO: Implement updateStateToPrev().
+			updateStateToPrev(state, inputs);
+			spacesCount = 9;
 		}
+		return;
 	} else if (ch != BACKSPACE) {
 		inputs.push_back(ch);
 	}
@@ -217,13 +279,14 @@ void printGame(string &state, string &inputs, char &ch, int &spacesCount,
 		}
 	}
 	if (i >= inputs.size() && j >= state.size()) {
-		cout << GREY_COLOR;
+		cout << WHITE_COLOR;
 		cout << REVERSE_VIDEO;
 		cout << ' ';
 		cout << RESET_VIDEO;
+		cout << GREY_COLOR;
 	}
 	if (j < state.size()) {
-		cout << GREY_COLOR;
+		cout << WHITE_COLOR;
 		cout << REVERSE_VIDEO;
 		cout << state[j];
 		cout << RESET_VIDEO;
@@ -240,7 +303,7 @@ void printGame(string &state, string &inputs, char &ch, int &spacesCount,
 		for (; i < inputs.size(); i++) {
 			cout << inputs[i];
 		}
-		cout << GREY_COLOR;
+		cout << WHITE_COLOR;
 		cout << REVERSE_VIDEO;
 		cout << ' ';
 		cout << RESET_VIDEO;
@@ -259,13 +322,15 @@ void updateAndPrintGame(string &state, string &inputs, char &ch,
 
 void runGame()
 {
-	vector<string> words = getNextWordSet();
-	int wc = words.size();
-	int spacesCount = 0;
-	int wordsSize = words.size();
 	string state = "";
+	string inputs = "";
+	pair<vector<string>, vector<string>> words =
+	    getNextWordSet(state, inputs);
+	int wc = words.first.size();
+	int spacesCount = 0;
+	int wordsSize = words.first.size();
 	for (int i = 0; i < wordsSize; i++) {
-		state += words[i] + ((i == wordsSize - 1) ? "" : " ");
+		state += words.first[i] + ((i == wordsSize - 1) ? "" : " ");
 	}
 	cin.tie(NULL);
 	char ch;
@@ -276,6 +341,7 @@ void runGame()
 	moveCursor(1, DOWN);
 	for (int i = 0; i < state.size(); i++) {
 		if (i == 0) {
+			cout << WHITE_COLOR;
 			cout << REVERSE_VIDEO;
 		}
 		cout << state[i];
@@ -287,8 +353,6 @@ void runGame()
 	cout << "\r";
 	cout << RESET_COLOR;
 	cout.flush();
-
-	string inputs = "";
 
 	struct pollfd fds[1];
 	fds[0].fd = STDIN_FILENO;
@@ -333,6 +397,7 @@ void signalHandler(int signal)
 
 void registerSignalHandlers()
 {
+	std::signal(SIGTSTP, signalHandler);
 	std::signal(SIGINT, signalHandler);
 	std::signal(SIGTERM, signalHandler);
 	std::signal(SIGSEGV, signalHandler);
@@ -353,6 +418,7 @@ void printer()
 
 int main(int argc, char **argv)
 {
+	srand(time(0));
 	registerSignalHandlers();
 	enterAlternateScreen();
 	disableCanonicalMode();

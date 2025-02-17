@@ -4,7 +4,7 @@
 - [x] Change the word coloring algorithm to if a char doesn't match then don't match the rest of the chars.
 - [x] BUG: Stop from crashing if more words are added when all words are complete.
 - [x] BUG: Backspace behaviour is wrong for spaces.
-- [ ] Add words list and choose words randomly from it.
+- [x] Add words list and choose words randomly from it.
 - [ ] Display results at the end.
 - [ ] Add help and other menu things.
 - [ ] Implement other modes like typeing test mode, current mode is time trial mode only.
