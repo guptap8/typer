@@ -5,7 +5,7 @@
 - [x] BUG: Stop from crashing if more words are added when all words are complete.
 - [x] BUG: Backspace behaviour is wrong for spaces.
 - [x] Add words list and choose words randomly from it.
-- [ ] Display results at the end.
+- [x] Display results at the end.
 - [ ] Add help and other menu things.
 - [ ] Implement other modes like typeing test mode, current mode is time trial mode only.
 - [ ] Add UTs?

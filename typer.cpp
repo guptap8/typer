@@ -185,7 +185,7 @@ pair<vector<string>, vector<string>> getNextWordSet(string &state,
 		int randNum = rand() % 1000;
 		nextWords.push_back(dictionary[randNum]);
 	};
-	wordsSet.push_back({nextWords, {}});
+	wordsSet.push_back({nextWords, inputsParsed});
 	wordsSetIdx++;
 	return {nextWords, {}};
 }
@@ -230,7 +230,6 @@ void updateState(string &state, string &inputs, char &ch, int &spacesCount,
 			}
 			inputs.pop_back();
 		} else {
-			// TODO: Implement updateStateToPrev().
 			updateStateToPrev(state, inputs);
 			spacesCount = 9;
 		}
@@ -363,6 +362,9 @@ void runGame()
 			updateAndPrintGame(state, inputs, ch, spacesCount, wc);
 		}
 	}
+	if (wordsSetIdx == wordsSet.size() - 1) {
+		getNextWordSet(state, inputs);
+	}
 }
 
 void timer(int seconds)
@@ -423,14 +425,24 @@ int main(int argc, char **argv)
 	enterAlternateScreen();
 	disableCanonicalMode();
 
-	int totalSeconds = 60;
+	int totalSeconds = 15;
 	thread worker(runGame);
 	thread timerWorker(timer, totalSeconds);
 	worker.join();
 	timerWorker.join();
 	cout << CLEAR_SCREEN;
+	int score = 0;
+	for (auto i : wordsSet) {
+		for (int j = 0; j < i.second.size(); j++) {
+			if (i.first[j] == i.second[j]) {
+				score++;
+			}
+		}
+	}
+	cout << WHITE_COLOR;
+	cout << "YOUR SCORE IS: " << score << endl;
 	cout << "GAME OVER" << endl;
-	this_thread::sleep_for(chrono::milliseconds(500));
+	this_thread::sleep_for(chrono::milliseconds(5000));
 
 	restoreTerminalSettings();
 	exitAlternateScreen();
