@@ -442,19 +442,16 @@ void printHelp()
 	exit(0);
 }
 
-void printInvalidOption()
-{
-	cout << "invalid text" << endl;
-	exit(1);
-}
-
 void setTotalSeconds(char *arg)
 {
 	if (arg != 0) {
 		try {
 			totalSeconds = stoi(arg);
 		} catch (...) {
-			printInvalidOption();
+			cout << "Invalid argument provided, integer number "
+				"required."
+			     << endl;
+			exit(1);
 		}
 	}
 }
