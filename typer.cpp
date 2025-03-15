@@ -55,6 +55,7 @@ enum CursorDirection { UP, DOWN, RIGHT, LEFT };
 
 int wordsSetIdx = -1;
 vector<pair<vector<string>, vector<string>>> wordsSet = {};
+int wordsSetSize = 10;
 int totalSeconds = 15;
 
 string moveCursor(int n, CursorDirection direction)
@@ -182,7 +183,7 @@ pair<vector<string>, vector<string>> getNextWordSet(string &state,
 		return temp;
 	}
 	vector<string> nextWords;
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < wordsSetSize; i++) {
 		int randNum = rand() % 1000;
 		nextWords.push_back(dictionary[randNum]);
 	};
@@ -438,15 +439,30 @@ void printHelp()
 	       "seconds "
 	       "\n"
 	       "\tif this option is not specified.\n\n";
+	cout << "--words <NUMBER>: Number of words to display at a time.\n\n";
 	cout << "--help: Print help.\n" << endl;
 	exit(0);
 }
 
-void setTotalSeconds(char *arg)
+void setWordsSize(char *size)
 {
-	if (arg != 0) {
+	if (size != 0) {
 		try {
-			totalSeconds = stoi(arg);
+			wordsSetSize = stoi(size);
+		} catch (...) {
+			cout << "Invalid argument provided, integer number "
+				"required."
+			     << endl;
+			exit(1);
+		}
+	}
+}
+
+void setTotalSeconds(char *seconds)
+{
+	if (seconds != 0) {
+		try {
+			totalSeconds = stoi(seconds);
 		} catch (...) {
 			cout << "Invalid argument provided, integer number "
 				"required."
@@ -461,16 +477,19 @@ void init(int argc, char *argv[])
 	int opt;
 	int option_index = 0;
 	struct option long_options[] = {{"time", required_argument, NULL, 't'},
+					{"words", required_argument, NULL, 'w'},
 					{"help", no_argument, NULL, 'h'},
 					{NULL, 0, NULL, 0}};
 
-	while ((opt = getopt_long(argc, argv, "t:h", long_options,
+	while ((opt = getopt_long(argc, argv, "w:t:h", long_options,
 				  &option_index)) != -1) {
 		switch (opt) {
+		case 'w':
+			setWordsSize(optarg);
+			break;
 		case 't':
 			setTotalSeconds(optarg);
-			startTheGame();
-			exit(0);
+			break;
 		case 'h':
 			printHelp();
 			break;
