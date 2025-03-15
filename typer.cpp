@@ -10,10 +10,9 @@
 #include <cstring>
 #include <ctime>
 #include <fstream>
+#include <getopt.h>
 #include <iostream>
-#include <map>
 #include <poll.h>
-#include <set>
 #include <string>
 #include <sys/ioctl.h>
 #include <sys/poll.h>
@@ -48,6 +47,8 @@
 
 using namespace std;
 
+void startTheGame();
+
 ofstream logs("./logs");
 
 enum CursorDirection { UP, DOWN, RIGHT, LEFT };
@@ -55,7 +56,6 @@ enum CursorDirection { UP, DOWN, RIGHT, LEFT };
 int wordsSetIdx = -1;
 vector<pair<vector<string>, vector<string>>> wordsSet = {};
 int totalSeconds = 15;
-string mode = "default";
 
 string moveCursor(int n, CursorDirection direction)
 {
@@ -73,17 +73,13 @@ string moveCursor(int n, CursorDirection direction)
 	case LEFT:
 		result += "D";
 		break;
-	// TODO: Move right by default because no error handling
-	// right now. Change later to handle invalid input properly.
-	default:
-		result += "A";
-		break;
 	}
 	cout << result;
 	return result;
 }
 
 atomic<bool> stopFlag{false};
+atomic<bool> started{false};
 atomic<int> currentTime{0};
 
 void printTimer(int time)
@@ -91,7 +87,7 @@ void printTimer(int time)
 	cout << RGB_COLOR(255, 255, 255);
 	cout << "\r";
 	moveCursor(1, UP);
-	cout << time;
+	cout << time << "/" << totalSeconds;
 	cout << "\r";
 	cout << RESET_COLOR;
 	cout.flush();
@@ -364,6 +360,9 @@ void runGame()
 	while (!stopFlag) {
 		if (isInputAvailable(fds)) {
 			ch = get_key();
+			if (!started) {
+				started = true;
+			}
 			updateAndPrintGame(state, inputs, ch, spacesCount, wc);
 		}
 	}
@@ -374,6 +373,11 @@ void runGame()
 
 void timer(int seconds)
 {
+	while (true) {
+		if (started) {
+			break;
+		}
+	}
 	for (int i = seconds; i > 0 && !stopFlag; --i) {
 		currentTime = seconds - i;
 		printTimer(currentTime);
@@ -423,95 +427,70 @@ void printer()
 	cout << "width of the terminal is " << to_string(width) << endl;
 }
 
-enum Opts { HELP, START, INVALID };
-const map<string, int> args = {{"help", 0}, {"start", 1}, {"", 1}};
-
-Opts getOpt(int argc, char **argv)
-{
-	if (argc <= 1) {
-		return START;
-	} else {
-		if (args.find(argv[1]) == args.end()) {
-			return INVALID;
-		}
-		switch (args.at(argv[1])) {
-		case 0:
-			return HELP;
-			break;
-		case 1:
-			return START;
-			break;
-		default:
-			return INVALID;
-		}
-	}
-}
-
 void printHelp()
 {
-	cout << "help text" << endl;
+	cout << "Usage:\n\n";
+	cout
+	    << "--time <SECONDS>: Total number of seconds for the game timer. "
+	       "\n"
+	       "\tTakes required 1 argument, the total number of seconds the \n"
+	       "\tgame should run for. By default, the game runs for 15 "
+	       "seconds "
+	       "\n"
+	       "\tif this option is not specified.\n\n";
+	cout << "--help: Print help.\n" << endl;
 	exit(0);
 }
 
-void printInvalid()
+void printInvalidOption()
 {
 	cout << "invalid text" << endl;
 	exit(1);
 }
 
-const set<string> modes = {"default", "race", "zen"};
-
-void setGameParams(int argc, char **argv)
+void setTotalSeconds(char *arg)
 {
-	if (argc <= 2) {
-		return;
-	} else if (argc == 3) {
+	if (arg != 0) {
 		try {
-			totalSeconds = stoi(argv[2]);
+			totalSeconds = stoi(arg);
 		} catch (...) {
-			printInvalid();
+			printInvalidOption();
 		}
-	} else if (argc == 4) {
-		mode = argv[2];
-		if (modes.find(mode) == modes.end()) {
-			printInvalid();
-		}
-		try {
-			totalSeconds = stoi(argv[3]);
-		} catch (...) {
-			printInvalid();
-		}
-	} else {
-		return;
 	}
 }
 
-void init(int argc, char **argv)
+void init(int argc, char *argv[])
 {
-	Opts opt;
-	switch ((opt = getOpt(argc, argv))) {
-	case HELP:
-		printHelp();
-		break;
-	case START:
-		setGameParams(argc, argv);
-		break;
-	default:
-		printInvalid();
-		break;
+	int opt;
+	int option_index = 0;
+	struct option long_options[] = {{"time", required_argument, NULL, 't'},
+					{"help", no_argument, NULL, 'h'},
+					{NULL, 0, NULL, 0}};
+
+	while ((opt = getopt_long(argc, argv, "t:h", long_options,
+				  &option_index)) != -1) {
+		switch (opt) {
+		case 't':
+			setTotalSeconds(optarg);
+			startTheGame();
+			exit(0);
+		case 'h':
+			printHelp();
+			break;
+		case '?':
+			exit(1);
+		}
 	}
 }
 
-int main(int argc, char **argv)
+void startTheGame()
 {
-	init(argc, argv);
-	srand(time(0));
 	registerSignalHandlers();
 	enterAlternateScreen();
 	disableCanonicalMode();
 
-	thread worker(runGame);
 	thread timerWorker(timer, totalSeconds);
+	thread worker(runGame);
 	worker.join();
 	timerWorker.join();
 	cout << CLEAR_SCREEN;
@@ -526,8 +505,16 @@ int main(int argc, char **argv)
 	cout << WHITE_COLOR;
 	cout << "YOUR SCORE IS: " << score << endl;
 	cout << "GAME OVER" << endl;
-	this_thread::sleep_for(chrono::milliseconds(700));
+	int endScreenTimeoutMS = 1000;
+	this_thread::sleep_for(chrono::milliseconds(endScreenTimeoutMS));
 
 	restoreTerminalSettings();
 	exitAlternateScreen();
+}
+
+int main(int argc, char **argv)
+{
+	init(argc, argv);
+	srand(time(0));
+	startTheGame();
 }

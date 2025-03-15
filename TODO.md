@@ -7,6 +7,4 @@
 - [x] Add words list and choose words randomly from it.
 - [x] Display results at the end.
 - [x] Add help and other menu things.
-- [ ] Replace dummy help and invalid outputs.
-- [ ] Implement other modes like typeing test mode, current mode is time trial mode only.
-- [ ] Add UTs?
+- [x] Replace dummy help and invalid outputs.
