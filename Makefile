@@ -1,8 +1,8 @@
 OBJS = typer.cpp
 
-CC = g++
+CC = g++ -std=c++17
 
-COMPILER_FLAGS = -w
+COMPILER_FLAGS = -w -pthread
 
 DEBUG_FLAGS = -g -DDBG
 
