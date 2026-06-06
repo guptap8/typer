@@ -12,6 +12,7 @@
 #include <fstream>
 #include <getopt.h>
 #include <iostream>
+#include <iterator>
 #include <poll.h>
 #include <string>
 #include <sys/ioctl.h>
@@ -120,18 +121,7 @@ char get_key()
 
 bool isInputAvailable(struct pollfd *fds)
 {
-	int ret = poll(fds, 1, 5);
-
-	bool res = false;
-
-	if (ret == -1) {
-		res = false;
-	} else if (ret > 0) {
-		if (fds[0].revents & POLLIN) {
-			res = true;
-		}
-	}
-	return res;
+	return (poll(fds, 1, 5) != -1 ? fds[0].revents & POLLIN : false);
 }
 
 pair<string, string> getStateInputs(pair<vector<string>, vector<string>> &words)
@@ -184,7 +174,7 @@ pair<vector<string>, vector<string>> getNextWordSet(string &state,
 	}
 	vector<string> nextWords;
 	for (int i = 0; i < wordsSetSize; i++) {
-		int randNum = rand() % 1000;
+		int randNum = rand() % dictionary.size();
 		nextWords.push_back(dictionary[randNum]);
 	};
 	wordsSet.push_back({nextWords, inputsParsed});
@@ -221,7 +211,7 @@ void updateStateToNext(string &state, string &inputs, int &spacesCount, int &wc)
 void updateState(string &state, string &inputs, char &ch, int &spacesCount,
 		 int &wc)
 {
-	if ((ch > 'z' || ch < 'a') && (ch < 'A' || ch > 'Z') &&
+	if ((ch > 'z' || ch < 'a') && (ch < 'A' || ch > 'Z') && ch != '\'' &&
 	    ch != BACKSPACE && ch != ' ') {
 		return;
 	}
@@ -472,12 +462,16 @@ void setTotalSeconds(char *seconds)
 	}
 }
 
+void setSize(char *dims) {
+
+}
+
 void init(int argc, char *argv[])
 {
 	int opt;
 	int option_index = 0;
-	struct option long_options[] = {{"time", required_argument, NULL, 't'},
-					{"words", required_argument, NULL, 'w'},
+	struct option long_options[] = {{"words", required_argument, NULL, 'w'},
+					{"time", required_argument, NULL, 't'},
 					{"help", no_argument, NULL, 'h'},
 					{NULL, 0, NULL, 0}};
 
@@ -490,6 +484,8 @@ void init(int argc, char *argv[])
 		case 't':
 			setTotalSeconds(optarg);
 			break;
+		case 's':
+			setSize(optarg);
 		case 'h':
 			printHelp();
 			break;
@@ -530,7 +526,7 @@ void startTheGame()
 
 int main(int argc, char **argv)
 {
-	init(argc, argv);
 	srand(time(0));
+	init(argc, argv);
 	startTheGame();
 }

@@ -8,3 +8,7 @@
 - [x] Display results at the end.
 - [x] Add help and other menu things.
 - [x] Replace dummy help and invalid outputs.
+- [ ] Don't exit after game over.
+    - [ ] Quit.
+    - [ ] Replay.
+    - [ ] Replay with options.
