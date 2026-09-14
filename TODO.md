@@ -15,6 +15,7 @@
 - [-] Don't exit after game over.
     - [x] Add option to quit.
     - [x] Add option to replay.
-    - [ ] Fix backspace bug on replay.
+    - [ ] Bug: Fix backspace bug on replay.
         - When backspace pressed on a new replay, the game starts showing previous games words.
+    - [ ] Bug: Reset score on replays.
     - [ ] Add option to replay with options.
