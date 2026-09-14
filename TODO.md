@@ -1,3 +1,7 @@
+-- very secret highlighting code --
+-- hl:todo:^%s*%- %[%s%]:yellow:black
+-- hl:in_progress:^%s*%- %[%-%]:blue:white
+
 - [x] Initial program.
 - [x] Add timer.
 - [x] Refactor to use non blocking IO.
@@ -8,7 +12,9 @@
 - [x] Display results at the end.
 - [x] Add help and other menu things.
 - [x] Replace dummy help and invalid outputs.
-- [ ] Don't exit after game over.
-    - [ ] Quit.
-    - [ ] Replay.
-    - [ ] Replay with options.
+- [-] Don't exit after game over.
+    - [x] Add option to quit.
+    - [x] Add option to replay.
+    - [ ] Fix backspace bug on replay.
+        - When backspace pressed on a new replay, the game starts showing previous games words.
+    - [ ] Add option to replay with options.

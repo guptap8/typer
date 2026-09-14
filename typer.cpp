@@ -462,9 +462,7 @@ void setTotalSeconds(char *seconds)
 	}
 }
 
-void setSize(char *dims) {
-
-}
+void setSize(char *dims) {}
 
 void init(int argc, char *argv[])
 {
@@ -501,22 +499,49 @@ void startTheGame()
 	enterAlternateScreen();
 	disableCanonicalMode();
 
-	thread timerWorker(timer, totalSeconds);
-	thread worker(runGame);
-	worker.join();
-	timerWorker.join();
-	cout << CLEAR_SCREEN;
-	int score = 0;
-	for (auto i : wordsSet) {
-		for (int j = 0; j < i.second.size(); j++) {
-			if (i.first[j] == i.second[j]) {
-				score++;
+	while (true) {
+		thread timerWorker(timer, totalSeconds);
+		thread worker(runGame);
+		worker.join();
+		timerWorker.join();
+		cout << CLEAR_SCREEN;
+		int score = 0;
+		for (auto i : wordsSet) {
+			for (int j = 0; j < i.second.size(); j++) {
+				if (i.first[j] == i.second[j]) {
+					score++;
+				}
 			}
 		}
+		cout << WHITE_COLOR;
+		cout << "YOUR SCORE IS: " << score << endl;
+		cout << "GAME OVER" << endl;
+		cout << "PRESS 'r' TO REPLAY, 'q' OTHER KEY TO EXIT" << endl;
+		int exit = 0;
+		while (true) {
+			char ch;
+			struct pollfd fds[1];
+			fds[0].fd = STDIN_FILENO;
+			fds[0].events = POLLIN;
+			if (isInputAvailable(fds)) {
+				ch = get_key();
+				if (ch == 'r') {
+					cout << CLEAR_SCREEN;
+					exit = 1;
+					started = false;
+					stopFlag = false;
+					score = 0;
+					currentTime = 0;
+				} else if (ch == 'q') {
+					exit = 2;
+				}
+				break;
+			}
+		}
+		if (exit == 2) {
+			break;
+		}
 	}
-	cout << WHITE_COLOR;
-	cout << "YOUR SCORE IS: " << score << endl;
-	cout << "GAME OVER" << endl;
 	int endScreenTimeoutMS = 1000;
 	this_thread::sleep_for(chrono::milliseconds(endScreenTimeoutMS));
 
