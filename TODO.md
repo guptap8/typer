@@ -12,10 +12,11 @@
 - [x] Display results at the end.
 - [x] Add help and other menu things.
 - [x] Replace dummy help and invalid outputs.
-- [-] Don't exit after game over.
+- [x] Don't exit after game over.
     - [x] Add option to quit.
     - [x] Add option to replay.
-    - [ ] Bug: Fix backspace bug on replay.
+    - [x] Bug: Fix backspace bug on replay.
         - When backspace pressed on a new replay, the game starts showing previous games words.
-    - [ ] Bug: Reset score on replays.
-    - [ ] Add option to replay with options.
+    - [x] Bug: Reset score on replays.
+- [ ] Add option to replay with options.
+- [ ] Bug: Exit is very slow when through 'q'.

@@ -12,7 +12,6 @@
 #include <fstream>
 #include <getopt.h>
 #include <iostream>
-#include <iterator>
 #include <poll.h>
 #include <string>
 #include <sys/ioctl.h>
@@ -515,8 +514,8 @@ void startTheGame()
 		}
 		cout << WHITE_COLOR;
 		cout << "YOUR SCORE IS: " << score << endl;
-		cout << "GAME OVER" << endl;
-		cout << "PRESS 'r' TO REPLAY, 'q' OTHER KEY TO EXIT" << endl;
+		cout << "GAME OVER\n" << endl;
+		cout << "PRESS 'r' TO REPLAY\nPRESS 'q' TO EXIT" << endl;
 		int exit = 0;
 		while (true) {
 			char ch;
@@ -532,6 +531,8 @@ void startTheGame()
 					stopFlag = false;
 					score = 0;
 					currentTime = 0;
+					wordsSet = {};
+					wordsSetIdx = -1;
 				} else if (ch == 'q') {
 					exit = 2;
 				}
