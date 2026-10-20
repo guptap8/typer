@@ -18,5 +18,12 @@
     - [x] Bug: Fix backspace bug on replay.
         - When backspace pressed on a new replay, the game starts showing previous games words.
     - [x] Bug: Reset score on replays.
+- [x] Move printing to separate thread.
+- [x] Add a menu of some kind for replay or quit.
+- [ ] Move menu printing to the printing thread.
+- [ ] Enhance menu to selecting/changing options.
+- [ ] Record speed and other stats.
 - [ ] Add option to replay with options.
+- [ ] Bug: Sometimes after replay, the first space moves to the words to the next set.
 - [ ] Bug: Exit is very slow when through 'q'.
+- [ ] Bug: Sometimes after first word, it skips directly to next line.

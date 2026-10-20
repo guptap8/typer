@@ -244,7 +244,11 @@ void updateState()
 			gameState.inputs.pop_back();
 		} else {
 			updateStateToPrev(gameState.state, gameState.inputs);
-			gameState.spacesCount = gameState.wc - 1;
+			if (gameState.wc > 0) {
+				gameState.spacesCount = gameState.wc - 1;
+			} else {
+				gameState.spacesCount = 0;
+			}
 		}
 		return;
 	} else if (gameState.ch != BACKSPACE) {
@@ -341,7 +345,7 @@ void printGame()
 
 		// Flush output.
 		cout.flush();
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		std::this_thread::sleep_for(std::chrono::milliseconds(40));
 	}
 }
 
