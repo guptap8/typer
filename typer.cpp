@@ -12,6 +12,7 @@
 #include <fstream>
 #include <getopt.h>
 #include <iostream>
+#include <mutex>
 #include <poll.h>
 #include <string>
 #include <sys/ioctl.h>
@@ -47,16 +48,28 @@
 
 using namespace std;
 
+/*
+ * string &state, string &inputs, char &ch,
+			int &spacesCount, int &wc
+	*/
+struct GameState {
+	string state;
+	string inputs;
+	char ch;
+	int spacesCount;
+	int wc;
+	mutex lock;
+	int wordsSetIdx = -1;
+	vector<pair<vector<string>, vector<string>>> wordsSet = {};
+	int wordsSetSize = 10;
+	int totalSeconds = 15;
+} gameState;
+
 void startTheGame();
 
 ofstream logs("./logs");
 
 enum CursorDirection { UP, DOWN, RIGHT, LEFT };
-
-int wordsSetIdx = -1;
-vector<pair<vector<string>, vector<string>>> wordsSet = {};
-int wordsSetSize = 10;
-int totalSeconds = 15;
 
 string moveCursor(int n, CursorDirection direction)
 {
@@ -83,8 +96,15 @@ atomic<bool> stopFlag{false};
 atomic<bool> started{false};
 atomic<int> currentTime{0};
 
+int getTotalSeconds()
+{
+	lock_guard<mutex> lock(gameState.lock);
+	return gameState.totalSeconds;
+}
+
 void printTimer(int time)
 {
+	int totalSeconds = getTotalSeconds();
 	cout << RGB_COLOR(255, 255, 255);
 	cout << "\r";
 	moveCursor(1, UP);
@@ -140,11 +160,11 @@ pair<string, string> getStateInputs(pair<vector<string>, vector<string>> &words)
 
 pair<vector<string>, vector<string>> getPrevWordSet()
 {
-	wordsSetIdx--;
-	if (wordsSetIdx < 0) {
-		wordsSetIdx = 0;
+	gameState.wordsSetIdx--;
+	if (gameState.wordsSetIdx < 0) {
+		gameState.wordsSetIdx = 0;
 	}
-	return wordsSet[wordsSetIdx];
+	return gameState.wordsSet[gameState.wordsSetIdx];
 }
 
 pair<vector<string>, vector<string>> getNextWordSet(string &state,
@@ -163,21 +183,21 @@ pair<vector<string>, vector<string>> getNextWordSet(string &state,
 	if (temp != "") {
 		inputsParsed.push_back(temp);
 	}
-	if (!wordsSet.empty()) {
-		wordsSet[wordsSetIdx].second = inputsParsed;
+	if (!gameState.wordsSet.empty()) {
+		gameState.wordsSet[gameState.wordsSetIdx].second = inputsParsed;
 	}
-	if (wordsSetIdx < wordsSet.size() - 1) {
-		wordsSetIdx++;
-		auto temp = wordsSet[wordsSetIdx];
+	if (gameState.wordsSetIdx < gameState.wordsSet.size() - 1) {
+		gameState.wordsSetIdx++;
+		auto temp = gameState.wordsSet[gameState.wordsSetIdx];
 		return temp;
 	}
 	vector<string> nextWords;
-	for (int i = 0; i < wordsSetSize; i++) {
+	for (int i = 0; i < gameState.wordsSetSize; i++) {
 		int randNum = rand() % dictionary.size();
 		nextWords.push_back(dictionary[randNum]);
 	};
-	wordsSet.push_back({nextWords, inputsParsed});
-	wordsSetIdx++;
+	gameState.wordsSet.push_back({nextWords, inputsParsed});
+	gameState.wordsSetIdx++;
 	return {nextWords, {}};
 }
 
@@ -207,157 +227,172 @@ void updateStateToNext(string &state, string &inputs, int &spacesCount, int &wc)
 		inputs.pop_back();
 }
 
-void updateState(string &state, string &inputs, char &ch, int &spacesCount,
-		 int &wc)
+void updateState()
 {
-	if ((ch > 'z' || ch < 'a') && (ch < 'A' || ch > 'Z') && ch != '\'' &&
-	    ch != BACKSPACE && ch != ' ') {
+	lock_guard<mutex> lock(gameState.lock);
+	if ((gameState.ch > 'z' || gameState.ch < 'a') &&
+	    (gameState.ch < 'A' || gameState.ch > 'Z') &&
+	    gameState.ch != '\'' && gameState.ch != BACKSPACE &&
+	    gameState.ch != ' ') {
 		return;
 	}
-	if (ch == BACKSPACE) {
-		if (!inputs.empty()) {
-			if (inputs.back() == ' ') {
-				spacesCount--;
+	if (gameState.ch == BACKSPACE) {
+		if (!gameState.inputs.empty()) {
+			if (gameState.inputs.back() == ' ') {
+				gameState.spacesCount--;
 			}
-			inputs.pop_back();
+			gameState.inputs.pop_back();
 		} else {
-			updateStateToPrev(state, inputs);
-			spacesCount = 9;
+			updateStateToPrev(gameState.state, gameState.inputs);
+			gameState.spacesCount = gameState.wc - 1;
 		}
 		return;
-	} else if (ch != BACKSPACE) {
-		inputs.push_back(ch);
+	} else if (gameState.ch != BACKSPACE) {
+		gameState.inputs.push_back(gameState.ch);
 	}
-	if (ch == ' ') {
-		spacesCount++;
+	if (gameState.ch == ' ') {
+		gameState.spacesCount++;
 	}
-	if (spacesCount >= wc) {
-		updateStateToNext(state, inputs, spacesCount, wc);
+	if (gameState.spacesCount >= gameState.wc) {
+		updateStateToNext(gameState.state, gameState.inputs,
+				  gameState.spacesCount, gameState.wc);
 	}
 }
 
-void printGame(string &state, string &inputs, char &ch, int &spacesCount,
-	       int &wc)
+void getGameState(char &ch, string &inputs, int &spacesCount, string &state,
+		  int &wc)
 {
-	cout << CLEAR_SCREEN;
-	printTimer(currentTime);
-	moveCursor(1, DOWN);
-	int i, j;
-	for (i = 0, j = 0; i < inputs.size() && j < state.size();) {
-		if (state[j] == ' ' && inputs[i] != ' ') {
+	lock_guard<mutex> lock(gameState.lock);
+	ch = gameState.ch;
+	inputs = gameState.inputs;
+	spacesCount = gameState.spacesCount;
+	state = gameState.state;
+	wc = gameState.wc;
+}
+
+void printGame()
+{
+	while (!stopFlag) {
+		char ch;
+		string inputs;
+		int spacesCount;
+		string state;
+		int wc;
+		getGameState(ch, inputs, spacesCount, state, wc);
+		cout << CLEAR_SCREEN;
+		printTimer(currentTime);
+		moveCursor(1, DOWN);
+		int i, j;
+		for (i = 0, j = 0; i < inputs.size() && j < state.size();) {
+			if (state[j] == ' ' && inputs[i] != ' ') {
+				cout << RED_COLOR;
+				cout << inputs[i];
+				i++;
+			} else if (inputs[i] == ' ' && state[j] != ' ') {
+				while (j < state.size() && state[j] != ' ') {
+					cout << GREY_COLOR;
+					cout << state[j];
+					j++;
+				}
+				cout << inputs[i];
+				i++;
+				j++;
+			} else {
+				if (state[j] == inputs[i]) {
+					cout << GREEN_COLOR;
+				} else if (state[j] != inputs[i]) {
+					cout << RED_COLOR;
+				}
+				cout << state[j];
+				i++;
+				j++;
+			}
+		}
+		if (i >= inputs.size() && j >= state.size()) {
+			cout << WHITE_COLOR;
+			cout << REVERSE_VIDEO;
+			cout << ' ';
+			cout << RESET_VIDEO;
+			cout << GREY_COLOR;
+		}
+		if (j < state.size()) {
+			cout << WHITE_COLOR;
+			cout << REVERSE_VIDEO;
+			cout << state[j];
+			cout << RESET_VIDEO;
+			cout << GREY_COLOR;
+			j++;
+			for (; j < state.size(); j++) {
+				cout << state[j];
+			}
+		}
+		if (i < inputs.size()) {
 			cout << RED_COLOR;
 			cout << inputs[i];
 			i++;
-		} else if (inputs[i] == ' ' && state[j] != ' ') {
-			while (j < state.size() && state[j] != ' ') {
-				cout << GREY_COLOR;
-				cout << state[j];
-				j++;
+			for (; i < inputs.size(); i++) {
+				cout << inputs[i];
 			}
-			cout << inputs[i];
-			i++;
-			j++;
-		} else {
-			if (state[j] == inputs[i]) {
-				cout << GREEN_COLOR;
-			} else if (state[j] != inputs[i]) {
-				cout << RED_COLOR;
-			}
-			cout << state[j];
-			i++;
-			j++;
+			cout << WHITE_COLOR;
+			cout << REVERSE_VIDEO;
+			cout << ' ';
+			cout << RESET_VIDEO;
 		}
-	}
-	if (i >= inputs.size() && j >= state.size()) {
-		cout << WHITE_COLOR;
-		cout << REVERSE_VIDEO;
-		cout << ' ';
-		cout << RESET_VIDEO;
-		cout << GREY_COLOR;
-	}
-	if (j < state.size()) {
-		cout << WHITE_COLOR;
-		cout << REVERSE_VIDEO;
-		cout << state[j];
-		cout << RESET_VIDEO;
-		cout << GREY_COLOR;
-		j++;
-		for (; j < state.size(); j++) {
-			cout << state[j];
-		}
-	}
-	if (i < inputs.size()) {
-		cout << RED_COLOR;
-		cout << inputs[i];
-		i++;
-		for (; i < inputs.size(); i++) {
-			cout << inputs[i];
-		}
-		cout << WHITE_COLOR;
-		cout << REVERSE_VIDEO;
-		cout << ' ';
-		cout << RESET_VIDEO;
-	}
 
-	// Flush output.
-	cout.flush();
+		// Flush output.
+		cout.flush();
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
 }
 
-void updateAndPrintGame(string &state, string &inputs, char &ch,
-			int &spacesCount, int &wc)
+void initializeGameState()
 {
-	updateState(state, inputs, ch, spacesCount, wc);
-	printGame(state, inputs, ch, spacesCount, wc);
+	lock_guard<mutex> lock(gameState.lock);
+	gameState.spacesCount = 0;
+	gameState.state = "";
+	gameState.inputs = "";
+	gameState.wc = 0;
+	gameState.wordsSet = {};
+	gameState.wordsSetIdx = -1;
+}
+
+void initializeGameStateWithWords(pair<vector<string>, vector<string>> &words)
+{
+	lock_guard<mutex> lock(gameState.lock);
+	int wordsSize = words.first.size();
+	gameState.wc = wordsSize;
+	for (int i = 0; i < wordsSize; i++) {
+		gameState.state +=
+		    words.first[i] + ((i == wordsSize - 1) ? "" : " ");
+	}
+}
+
+bool shouldGetNextWordSet()
+{
+	lock_guard<mutex> lock(gameState.lock);
+	return (gameState.wordsSetIdx == (gameState.wordsSet.size() - 1));
 }
 
 void runGame()
 {
-	string state = "";
-	string inputs = "";
 	pair<vector<string>, vector<string>> words =
-	    getNextWordSet(state, inputs);
-	int wc = words.first.size();
-	int spacesCount = 0;
-	int wordsSize = words.first.size();
-	for (int i = 0; i < wordsSize; i++) {
-		state += words.first[i] + ((i == wordsSize - 1) ? "" : " ");
-	}
+	    getNextWordSet(gameState.state, gameState.inputs);
+	initializeGameStateWithWords(words);
 	cin.tie(NULL);
-	char ch;
-
-	cout << CLEAR_SCREEN;
-	printTimer(currentTime);
-	cout << GREY_COLOR;
-	moveCursor(1, DOWN);
-	for (int i = 0; i < state.size(); i++) {
-		if (i == 0) {
-			cout << WHITE_COLOR;
-			cout << REVERSE_VIDEO;
-		}
-		cout << state[i];
-		if (i == 0) {
-			cout << RESET_VIDEO;
-			cout << GREY_COLOR;
-		}
-	}
-	cout << "\r";
-	cout << RESET_COLOR;
-	cout.flush();
-
 	struct pollfd fds[1];
 	fds[0].fd = STDIN_FILENO;
 	fds[0].events = POLLIN;
 	while (!stopFlag) {
 		if (isInputAvailable(fds)) {
-			ch = get_key();
+			gameState.ch = get_key();
 			if (!started) {
 				started = true;
 			}
-			updateAndPrintGame(state, inputs, ch, spacesCount, wc);
+			updateState();
 		}
 	}
-	if (wordsSetIdx == wordsSet.size() - 1) {
-		getNextWordSet(state, inputs);
+	if (shouldGetNextWordSet()) {
+		getNextWordSet(gameState.state, gameState.inputs);
 	}
 }
 
@@ -437,7 +472,7 @@ void setWordsSize(char *size)
 {
 	if (size != 0) {
 		try {
-			wordsSetSize = stoi(size);
+			gameState.wordsSetSize = stoi(size);
 		} catch (...) {
 			cout << "Invalid argument provided, integer number "
 				"required."
@@ -451,7 +486,7 @@ void setTotalSeconds(char *seconds)
 {
 	if (seconds != 0) {
 		try {
-			totalSeconds = stoi(seconds);
+			gameState.totalSeconds = stoi(seconds);
 		} catch (...) {
 			cout << "Invalid argument provided, integer number "
 				"required."
@@ -492,53 +527,72 @@ void init(int argc, char *argv[])
 	}
 }
 
+const string EXIT_MESSAGE = "PRESS [r] TO REPLAY\nPRESS [q] TO EXIT";
+const string SCORE_MESSAGE = "YOUR SCORE IS: ";
+const string GAME_OVER = "GAME OVER\n";
+
+int showExitScreen(int exit)
+{
+	cout << CLEAR_SCREEN;
+	int score = 0;
+	for (auto i : gameState.wordsSet) {
+		for (int j = 0; j < i.second.size(); j++) {
+			if (i.first[j] == i.second[j]) {
+				score++;
+			}
+		}
+	}
+	cout << WHITE_COLOR;
+	cout << SCORE_MESSAGE << score << endl;
+	cout << GAME_OVER << endl;
+	cout << WHITE_COLOR;
+	cout << EXIT_MESSAGE << endl;
+	while (true) {
+		char ch;
+		struct pollfd fds[1];
+		fds[0].fd = STDIN_FILENO;
+		fds[0].events = POLLIN;
+		cout << CLEAR_SCREEN;
+		cout << WHITE_COLOR;
+		cout << SCORE_MESSAGE << score << endl;
+		cout << GAME_OVER << endl;
+		cout << WHITE_COLOR;
+		cout << EXIT_MESSAGE << endl;
+		if (isInputAvailable(fds)) {
+			ch = get_key();
+			if (ch == 'r') {
+				cout << CLEAR_SCREEN;
+				exit = 1;
+				started = false;
+				stopFlag = false;
+				score = 0;
+				currentTime = 0;
+				initializeGameState();
+			} else if (ch == 'q') {
+				exit = 2;
+			}
+			break;
+		}
+	}
+	return exit;
+}
+
 void startTheGame()
 {
 	registerSignalHandlers();
 	enterAlternateScreen();
 	disableCanonicalMode();
 
+	initializeGameState();
 	while (true) {
-		thread timerWorker(timer, totalSeconds);
-		thread worker(runGame);
-		worker.join();
+		thread timerWorker(timer, gameState.totalSeconds);
+		thread gameWorker(runGame);
+		thread printerWorker(printGame);
+		gameWorker.join();
+		printerWorker.join();
 		timerWorker.join();
-		cout << CLEAR_SCREEN;
-		int score = 0;
-		for (auto i : wordsSet) {
-			for (int j = 0; j < i.second.size(); j++) {
-				if (i.first[j] == i.second[j]) {
-					score++;
-				}
-			}
-		}
-		cout << WHITE_COLOR;
-		cout << "YOUR SCORE IS: " << score << endl;
-		cout << "GAME OVER\n" << endl;
-		cout << "PRESS 'r' TO REPLAY\nPRESS 'q' TO EXIT" << endl;
 		int exit = 0;
-		while (true) {
-			char ch;
-			struct pollfd fds[1];
-			fds[0].fd = STDIN_FILENO;
-			fds[0].events = POLLIN;
-			if (isInputAvailable(fds)) {
-				ch = get_key();
-				if (ch == 'r') {
-					cout << CLEAR_SCREEN;
-					exit = 1;
-					started = false;
-					stopFlag = false;
-					score = 0;
-					currentTime = 0;
-					wordsSet = {};
-					wordsSetIdx = -1;
-				} else if (ch == 'q') {
-					exit = 2;
-				}
-				break;
-			}
-		}
+		exit = showExitScreen(exit);
 		if (exit == 2) {
 			break;
 		}
